@@ -355,18 +355,25 @@ async function destroy() {
   console.log('🗑️  All collections cleared.');
 }
 
-(async () => {
-  try {
-    if (process.argv.includes('--destroy')) {
-      await destroy();
-    } else {
-      await seed();
+// Only run when executed directly (`node src/utils/seed.js`). Without this
+// guard, merely `require()`-ing the module — e.g. from an ad-hoc test script —
+// wipes and reseeds the database, which is a nasty surprise.
+if (require.main === module) {
+  (async () => {
+    try {
+      if (process.argv.includes('--destroy')) {
+        await destroy();
+      } else {
+        await seed();
+      }
+      await disconnectDB();
+      process.exit(0);
+    } catch (error) {
+      console.error('❌ Seed failed:', error);
+      await disconnectDB();
+      process.exit(1);
     }
-    await disconnectDB();
-    process.exit(0);
-  } catch (error) {
-    console.error('❌ Seed failed:', error);
-    await disconnectDB();
-    process.exit(1);
-  }
-})();
+  })();
+}
+
+module.exports = { seed, destroy };
