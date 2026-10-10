@@ -27,9 +27,15 @@ const allowedOrigins = new Set(env.clientUrls);
 app.use(
   cors({
     origin(origin, callback) {
-      // Same-origin requests (production on Vercel) and tools like curl send no
-      // Origin header — always allow those.
-      if (!origin || allowedOrigins.has(origin)) return callback(null, true);
+      // Tools like curl send no Origin header — always allow those.
+      if (!origin) return callback(null, true);
+      // Allow anything in the explicit allowlist (dev URLs, etc.).
+      if (allowedOrigins.has(origin)) return callback(null, true);
+      // In production on Vercel the SPA and API share a domain. The browser still
+      // sends an Origin header for same-origin requests, so we allow the host that
+      // actually serves this request rather than hard-coding deployment URLs.
+      if (env.isProduction && origin === req.hostname) return callback(null, true);
+      // Dev mode: permissive so local frontends can call the API.
       if (!env.isProduction) return callback(null, true);
       return callback(new Error(`Origin ${origin} is not allowed by CORS`));
     },
