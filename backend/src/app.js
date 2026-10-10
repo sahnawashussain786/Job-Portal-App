@@ -22,6 +22,16 @@ app.use(
   }),
 );
 
+app.use((req, _res, next) => {
+  // Stash the current request so the CORS callback below can read the Host header.
+  corsCurrentReq = req;
+  next();
+});
+
+/** Most recent request — set by the middleware above so the CORS origin check
+ * can compare the Origin header with the Host header (same-origin on Vercel). */
+let corsCurrentReq;
+
 const allowedOrigins = new Set(env.clientUrls);
 
 app.use(
@@ -34,7 +44,7 @@ app.use(
       // In production on Vercel the SPA and API share a domain. The browser still
       // sends an Origin header for same-origin requests, so we allow the host that
       // actually serves this request rather than hard-coding deployment URLs.
-      if (env.isProduction && origin === req.hostname) return callback(null, true);
+      if (env.isProduction && corsCurrentReq && origin === corsCurrentReq.get('Host')) return callback(null, true);
       // Dev mode: permissive so local frontends can call the API.
       if (!env.isProduction) return callback(null, true);
       return callback(new Error(`Origin ${origin} is not allowed by CORS`));
