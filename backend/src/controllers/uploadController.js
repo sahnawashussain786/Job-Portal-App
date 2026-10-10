@@ -14,17 +14,58 @@ function assertConfigured() {
   }
 }
 
+/**
+ * Translate Cloudinary SDK failures into operational API errors with messages
+ * an operator can act on. The SDK surfaces auth/permission failures as a bare
+ * `UnexpectedResponse` with only an HTTP code, which would otherwise leak out
+ * as an opaque 500 ("Something went wrong on our end") in production.
+ */
+function mapCloudinaryError(error) {
+  const code = error?.http_code ?? error?.error?.http_code
+
+  if (code === 401 || code === 403) {
+    return new ApiError(
+      502,
+      `The storage service rejected the upload (HTTP ${code}): the CLOUDINARY_API_KEY does not have upload ` +
+        'permission. Regenerate the key in the Cloudinary console with full API permissions, then update ' +
+        'CLOUDINARY_API_KEY (and the secret if it changed) in .env and in Vercel → Settings → Environment Variables.',
+    )
+  }
+  if (code === 420 || code === 429) {
+    return new ApiError(502, 'The storage service rate limit was hit. Please try again in a few minutes.')
+  }
+  if (code === 404) {
+    return new ApiError(502, 'The storage service asset was not found (404).')
+  }
+  if (!code) {
+    // Network-level failure reaching Cloudinary.
+    return new ApiError(502, `Could not reach the storage service: ${error?.message || 'unknown error'}`)
+  }
+  return new ApiError(502, `The storage service rejected the upload (HTTP ${code}).`)
+}
+
+/** Run a Cloudinary op, converting SDK failures into operational errors. */
+async function runUpload(op) {
+  try {
+    return await op()
+  } catch (error) {
+    throw mapCloudinaryError(error)
+  }
+}
+
 // POST /api/uploads/image  — company logo or avatar
 const uploadImage = asyncHandler(async (req, res) => {
   assertConfigured();
   if (!req.file) throw ApiError.badRequest('No image file provided');
 
-  const result = await uploadBuffer(req.file.buffer, {
-    folder: 'jobportal/images',
-    resource_type: 'image',
-    // Normalise size/quality while keeping the original aspect ratio.
-    transformation: [{ width: 512, height: 512, crop: 'limit', quality: 'auto', fetch_format: 'auto' }],
-  });
+  const result = await runUpload(() =>
+    uploadBuffer(req.file.buffer, {
+      folder: 'jobportal/images',
+      resource_type: 'image',
+      // Normalise size/quality while keeping the original aspect ratio.
+      transformation: [{ width: 512, height: 512, crop: 'limit', quality: 'auto', fetch_format: 'auto' }],
+    }),
+  );
 
   const payload = {
     url: result.secure_url,
@@ -53,11 +94,13 @@ const uploadResume = asyncHandler(async (req, res) => {
   assertConfigured();
   if (!req.file) throw ApiError.badRequest('No resume file provided');
 
-  const result = await uploadBuffer(req.file.buffer, {
-    folder: 'jobportal/resumes',
-    resource_type: 'raw', // preserves the original file so it downloads intact
-    type: 'upload',
-  });
+  const result = await runUpload(() =>
+    uploadBuffer(req.file.buffer, {
+      folder: 'jobportal/resumes',
+      resource_type: 'raw', // preserves the original file so it downloads intact
+      type: 'upload',
+    }),
+  );
 
   // Replace any previous CV and clean up the old asset.
   await destroyAsset(req.user.resume?.publicId, 'raw');

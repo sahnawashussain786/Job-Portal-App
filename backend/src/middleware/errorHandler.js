@@ -39,9 +39,14 @@ function errorHandler(err, req, res, next) {
     console.error(`[${req.method} ${req.originalUrl}]`, err);
   }
 
+  // In production, only surface messages the code deliberately raised
+  // (`isOperational` ApiErrors carry actionable text). Unexpected 5xx errors
+  // are masked so internals never leak to end users.
+  const safeToDisplay = error.isOperational || statusCode < 500
+
   res.status(statusCode).json({
     success: false,
-    message: statusCode >= 500 && env.isProduction ? 'Something went wrong on our end' : error.message,
+    message: env.isProduction && !safeToDisplay ? 'Something went wrong on our end' : error.message,
     ...(error.details ? { errors: error.details } : {}),
     ...(env.isProduction ? {} : { stack: err.stack }),
   });
