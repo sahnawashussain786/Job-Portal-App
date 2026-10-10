@@ -13,8 +13,10 @@ async function start() {
     await connectDB();
     console.log('✅ MongoDB connected');
 
-    const server = app.listen(env.port, () => {
-      console.log(`🚀 API listening on http://localhost:${env.port}/api (${env.nodeEnv})`);
+    const PORT = env.port || 5000;
+
+    const server = app.listen(PORT, () => {
+      console.log(`🚀 API listening on http://localhost:${PORT}/api (${env.nodeEnv})`);
     });
 
     // Close the HTTP server and the DB connection cleanly on shutdown.
