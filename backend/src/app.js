@@ -36,7 +36,6 @@ app.use(
       // the app has no way to know every possible deployment alias up front, allow any
       // origin that looks like a vercel.app domain (same org, same project).
       if (env.isProduction && origin.endsWith('.vercel.app')) return callback(null, true);
-      if (env.isProduction && origin.endsWith('.vercel.app')) return callback(null, true);
       // Dev mode: permissive so local frontends can call the API.
       if (!env.isProduction) return callback(null, true);
       return callback(new Error(`Origin ${origin} is not allowed by CORS`));
